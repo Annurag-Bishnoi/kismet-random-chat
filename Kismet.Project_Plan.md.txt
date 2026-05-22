@@ -1,0 +1,25 @@
+# Kismet Project Plan
+
+## Goal
+Build a random chat platform like Omegle.
+
+## Version 1 Features
+- Start chat
+- Match with random online user
+- Text messaging
+- Next stranger
+- Disconnect
+
+## Later Features
+- Login system
+- Video chat
+- Report user
+- Block user
+- Moderation
+- Admin dashboard
+
+## Tech Stack
+Backend: Spring Boot
+Frontend: React
+Database: MySQL
+Realtime: WebSocket
