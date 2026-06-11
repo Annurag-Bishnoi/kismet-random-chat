@@ -1,33 +1,25 @@
-HELP.md
+# Target build directory
 target/
-.mvn/wrapper/maven-wrapper.jar
-!**/src/main/**/target/
-!**/src/test/**/target/
+*.class
 
-### STS ###
-.apt_generated
-.classpath
-.factorypath
-.project
-.settings
-.springBeans
-.sts4-cache
+# Maven wrapper
+.mvn/
+mvnw
+mvnw.cmd
 
-### IntelliJ IDEA ###
-.idea
-*.iws
+# IDE settings
+.shpackage/
+.idea/
 *.iml
-*.ipr
-
-### NetBeans ###
-/nbproject/private/
-/nbbuild/
-/dist/
-/nbdist/
-/.nb-gradle/
-build/
-!**/src/main/**/build/
-!**/src/test/**/build/
-
-### VS Code ###
+.classpath
+.project
+.settings/
 .vscode/
+
+# Node modules (for when you add your frontend/backend Node pieces)
+node_modules/
+.env
+
+# OS files
+.DS_Store
+Thumbs.db
