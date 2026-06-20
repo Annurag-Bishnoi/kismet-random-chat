@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Kismet WebSocket Test</title>
+</head>
+<body>
+    <h2>Kismet WebSocket Test</h2>
+
+    <button onclick="connect()">Connect</button>
+    <button onclick="disconnect()">Disconnect</button>
+
+    <br><br>
+
+    <input type="text" id="guestId" placeholder="Guest ID" value="GUEST-test123">
+    <input type="text" id="message" placeholder="Type message">
+
+    <button onclick="sendMessage()">Send</button>
+
+    <h3>Messages:</h3>
+    <ul id="messages"></ul>
+
+    <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@stomp/stompjs@7/bundles/stomp.umd.min.js"></script>
+
+    <script>
+        let stompClient = null;
+
+        function connect() {
+            const socket = new SockJS('http://localhost:8080/ws');
+
+            stompClient = new StompJs.Client({
+                webSocketFactory: () => socket,
+                reconnectDelay: 5000,
+                onConnect: function () {
+                    console.log('Connected to Kismet WebSocket');
+
+                    stompClient.subscribe('/topic/public', function (message) {
+                        const chatMessage = JSON.parse(message.body);
+                        showMessage(chatMessage);
+                    });
+                },
+                onStompError: function (frame) {
+                    console.error('Broker error: ' + frame.headers['message']);
+                    console.error('Details: ' + frame.body);
+                }
+            });
+
+            stompClient.activate();
+        }
+
+        function disconnect() {
+            if (stompClient !== null) {
+                stompClient.deactivate();
+                console.log("Disconnected");
+            }
+        }
+
+        function sendMessage() {
+            const guestId = document.getElementById('guestId').value;
+            const messageContent = document.getElementById('message').value;
+
+            if (!stompClient || !stompClient.connected) {
+                alert("Please connect first");
+                return;
+            }
+
+            const chatMessage = {
+                senderGuestId: guestId,
+                senderName: "Stranger",
+                content: messageContent,
+                messageType: "CHAT"
+            };
+
+            stompClient.publish({
+                destination: "/app/chat.send",
+                body: JSON.stringify(chatMessage)
+            });
+
+            document.getElementById('message').value = '';
+        }
+
+        function showMessage(message) {
+            const messagesList = document.getElementById('messages');
+            const messageItem = document.createElement('li');
+
+            messageItem.textContent =
+                message.senderGuestId + " : " + message.content + " [" + message.timestamp + "]";
+
+            messagesList.appendChild(messageItem);
+        }
+    </script>
+</body>
+</html>
