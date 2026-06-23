@@ -25,6 +25,10 @@ public class ChatSession {
     @Column(nullable = false)
     private String userOneGuestId;
 
+
+    @Column(nullable = false)
+    private String userTwoGuestId;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private ChatSessionStatus status;

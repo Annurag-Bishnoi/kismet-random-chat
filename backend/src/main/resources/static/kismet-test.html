@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Kismet Backend Test UI</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #111827;
+            color: #f9fafb;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: auto;
+        }
+
+        .card {
+            background: #1f2937;
+            border: 1px solid #374151;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        h1, h2 {
+            margin-top: 0;
+        }
+
+        button {
+            background: #6366f1;
+            color: white;
+            border: none;
+            padding: 10px 14px;
+            border-radius: 8px;
+            cursor: pointer;
+            margin: 4px;
+        }
+
+        button:hover {
+            background: #4f46e5;
+        }
+
+        button.danger {
+            background: #ef4444;
+        }
+
+        button.danger:hover {
+            background: #dc2626;
+        }
+
+        button.success {
+            background: #22c55e;
+        }
+
+        button.success:hover {
+            background: #16a34a;
+        }
+
+        button:disabled {
+            background: #6b7280;
+            cursor: not-allowed;
+        }
+
+        input {
+            width: 100%;
+            padding: 10px;
+            margin-top: 8px;
+            margin-bottom: 8px;
+            border-radius: 8px;
+            border: 1px solid #4b5563;
+            background: #111827;
+            color: white;
+        }
+
+        .row {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .box {
+            background: #111827;
+            border: 1px solid #374151;
+            border-radius: 8px;
+            padding: 12px;
+            margin-top: 10px;
+        }
+
+        .status {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 999px;
+            background: #374151;
+            margin-left: 8px;
+            font-size: 14px;
+        }
+
+        .green {
+            background: #166534;
+        }
+
+        .yellow {
+            background: #854d0e;
+        }
+
+        .red {
+            background: #7f1d1d;
+        }
+
+        .message {
+            padding: 8px;
+            background: #030712;
+            margin: 6px 0;
+            border-radius: 8px;
+        }
+
+        .log {
+            font-size: 14px;
+            color: #d1d5db;
+        }
+
+        code {
+            background: #030712;
+            padding: 3px 6px;
+            border-radius: 6px;
+        }
+    </style>
+</head>
+
+<body>
+<div class="container">
+
+    <h1>Kismet Backend Test UI</h1>
+    <p>This page tests Guest Module, WebSocket broadcast, and Matchmaking.</p>
+
+    <div class="card">
+        <h2>1. Guest User</h2>
+
+        <p>
+            Current Guest:
+            <span id="guestStatus" class="status red">Not Created</span>
+        </p>
+
+        <input type="text" id="guestId" placeholder="Guest ID will appear here" readonly>
+
+        <div class="row">
+            <button class="success" onclick="createGuest()">Create Guest</button>
+            <button onclick="getGuest()">Search Guest</button>
+            <button class="danger" onclick="clearGuest()">Clear Guest For This Tab</button>
+        </div>
+
+        <div class="box">
+            <strong>Guest Response:</strong>
+            <pre id="guestResponse">No guest yet</pre>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>2. WebSocket Connection</h2>
+
+        <p>
+            WebSocket:
+            <span id="socketStatus" class="status red">Disconnected</span>
+        </p>
+
+        <div class="row">
+            <button class="success" onclick="connectWebSocket()">Connect WebSocket</button>
+            <button class="danger" onclick="disconnectWebSocket()">Disconnect</button>
+        </div>
+
+        <p class="log">
+            Connect first before sending broadcast message or starting matchmaking.
+        </p>
+    </div>
+
+    <div class="card">
+        <h2>3. Day 3 Broadcast Test</h2>
+
+        <p>This uses <code>/app/chat.send</code> and receives from <code>/topic/public</code>.</p>
+
+        <input type="text" id="broadcastMessage" placeholder="Type broadcast test message">
+
+        <button onclick="sendBroadcastMessage()">Send Broadcast Message</button>
+
+        <div class="box">
+            <strong>Broadcast Messages:</strong>
+            <div id="broadcastMessages"></div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>4. Day 4 Matchmaking Test</h2>
+
+        <p>This uses <code>/app/chat.start</code> and receives from <code>/topic/match/{guestId}</code>.</p>
+
+        <p>
+            Match Status:
+            <span id="matchStatus" class="status red">Not Started</span>
+        </p>
+
+        <p>
+            Room ID:
+            <code id="roomId">No room yet</code>
+        </p>
+
+        <p>
+            Stranger Guest ID:
+            <code id="strangerGuestId">No stranger yet</code>
+        </p>
+
+        <button class="success" onclick="startChat()">Start Chat / Find Stranger</button>
+
+        <div class="box">
+            <strong>Match Response:</strong>
+            <pre id="matchResponse">No match response yet</pre>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Testing Steps</h2>
+        <ol>
+            <li>Open this page in two different tabs.</li>
+            <li>In Tab 1, click <strong>Create Guest</strong>.</li>
+            <li>In Tab 2, click <strong>Create Guest</strong>.</li>
+            <li>In both tabs, click <strong>Connect WebSocket</strong>.</li>
+            <li>In Tab 1, click <strong>Start Chat</strong>. It should show WAITING.</li>
+            <li>In Tab 2, click <strong>Start Chat</strong>. Both tabs should get MATCHED with same roomId.</li>
+        </ol>
+    </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@stomp/stompjs@7/bundles/stomp.umd.min.js"></script>
+
+<script>
+    let stompClient = null;
+    let publicSubscription = null;
+    let matchSubscription = null;
+    let isConnected = false;
+    let currentGuest = null;
+    let currentRoomId = null;
+
+    window.onload = function () {
+        const savedGuest = sessionStorage.getItem("kismetGuest");
+
+        if (savedGuest) {
+            currentGuest = JSON.parse(savedGuest);
+            document.getElementById("guestId").value = currentGuest.guestId;
+            document.getElementById("guestStatus").innerText = currentGuest.status || "Created";
+            document.getElementById("guestStatus").className = "status green";
+            document.getElementById("guestResponse").innerText = JSON.stringify(currentGuest, null, 2);
+        }
+    };
+
+    async function createGuest() {
+        try {
+            const response = await fetch("/api/guests", {
+                method: "POST"
+            });
+
+            if (!response.ok) {
+                throw new Error("Guest creation failed");
+            }
+
+            currentGuest = await response.json();
+
+            sessionStorage.setItem("kismetGuest", JSON.stringify(currentGuest));
+
+            document.getElementById("guestId").value = currentGuest.guestId;
+            document.getElementById("guestStatus").innerText = currentGuest.status;
+            document.getElementById("guestStatus").className = "status green";
+            document.getElementById("guestResponse").innerText = JSON.stringify(currentGuest, null, 2);
+
+            alert("Guest created: " + currentGuest.guestId);
+        } catch (error) {
+            alert("Error creating guest: " + error.message);
+            console.error(error);
+        }
+    }
+
+    async function getGuest() {
+        try {
+            const guestId = document.getElementById("guestId").value;
+
+            if (!guestId) {
+                alert("Create guest first");
+                return;
+            }
+
+            const response = await fetch("/api/guests/" + guestId);
+
+            if (!response.ok) {
+                throw new Error("Guest not found");
+            }
+
+            const guest = await response.json();
+
+            document.getElementById("guestResponse").innerText = JSON.stringify(guest, null, 2);
+            alert("Guest found");
+        } catch (error) {
+            alert("Error searching guest: " + error.message);
+            console.error(error);
+        }
+    }
+
+    function clearGuest() {
+        sessionStorage.removeItem("kismetGuest");
+        currentGuest = null;
+
+        document.getElementById("guestId").value = "";
+        document.getElementById("guestStatus").innerText = "Not Created";
+        document.getElementById("guestStatus").className = "status red";
+        document.getElementById("guestResponse").innerText = "No guest yet";
+
+        document.getElementById("matchStatus").innerText = "Not Started";
+        document.getElementById("matchStatus").className = "status red";
+        document.getElementById("roomId").innerText = "No room yet";
+        document.getElementById("strangerGuestId").innerText = "No stranger yet";
+        document.getElementById("matchResponse").innerText = "No match response yet";
+    }
+
+    function connectWebSocket() {
+        if (!currentGuest) {
+            alert("Create guest first");
+            return;
+        }
+
+        if (isConnected && stompClient && stompClient.connected) {
+            alert("Already connected");
+            return;
+        }
+
+        const socket = new SockJS("/ws");
+
+        stompClient = new StompJs.Client({
+            webSocketFactory: () => socket,
+            reconnectDelay: 5000,
+
+            onConnect: function () {
+                console.log("WebSocket connected");
+                isConnected = true;
+
+                document.getElementById("socketStatus").innerText = "Connected";
+                document.getElementById("socketStatus").className = "status green";
+
+                subscribeToPublicTopic();
+                subscribeToMatchTopic();
+            },
+
+            onStompError: function (frame) {
+                console.error("STOMP error:", frame);
+                alert("STOMP error. Check console.");
+            },
+
+            onWebSocketClose: function () {
+                console.log("WebSocket closed");
+                isConnected = false;
+
+                document.getElementById("socketStatus").innerText = "Disconnected";
+                document.getElementById("socketStatus").className = "status red";
+            }
+        });
+
+        stompClient.activate();
+    }
+
+    function subscribeToPublicTopic() {
+        if (publicSubscription) {
+            publicSubscription.unsubscribe();
+        }
+
+        publicSubscription = stompClient.subscribe("/topic/public", function (message) {
+            const chatMessage = JSON.parse(message.body);
+            showBroadcastMessage(chatMessage);
+        });
+    }
+
+    function subscribeToMatchTopic() {
+        if (matchSubscription) {
+            matchSubscription.unsubscribe();
+        }
+
+        const guestId = currentGuest.guestId;
+
+        matchSubscription = stompClient.subscribe("/topic/match/" + guestId, function (message) {
+            const response = JSON.parse(message.body);
+
+            console.log("Match response:", response);
+
+            document.getElementById("matchResponse").innerText = JSON.stringify(response, null, 2);
+
+            if (response.status === "WAITING") {
+                document.getElementById("matchStatus").innerText = "WAITING";
+                document.getElementById("matchStatus").className = "status yellow";
+            }
+
+            if (response.status === "MATCHED") {
+                currentRoomId = response.roomId;
+
+                document.getElementById("matchStatus").innerText = "MATCHED";
+                document.getElementById("matchStatus").className = "status green";
+                document.getElementById("roomId").innerText = response.roomId;
+                document.getElementById("strangerGuestId").innerText = response.strangerGuestId;
+
+                alert("Matched with stranger! Room ID: " + response.roomId);
+            }
+
+            if (response.status === "FAILED") {
+                document.getElementById("matchStatus").innerText = "FAILED";
+                document.getElementById("matchStatus").className = "status red";
+                alert(response.message);
+            }
+        });
+    }
+
+    function disconnectWebSocket() {
+        if (publicSubscription) {
+            publicSubscription.unsubscribe();
+            publicSubscription = null;
+        }
+
+        if (matchSubscription) {
+            matchSubscription.unsubscribe();
+            matchSubscription = null;
+        }
+
+        if (stompClient) {
+            stompClient.deactivate();
+            stompClient = null;
+        }
+
+        isConnected = false;
+
+        document.getElementById("socketStatus").innerText = "Disconnected";
+        document.getElementById("socketStatus").className = "status red";
+
+        console.log("WebSocket disconnected");
+    }
+
+    function sendBroadcastMessage() {
+        if (!isConnected || !stompClient || !stompClient.connected) {
+            alert("Connect WebSocket first");
+            return;
+        }
+
+        if (!currentGuest) {
+            alert("Create guest first");
+            return;
+        }
+
+        const content = document.getElementById("broadcastMessage").value;
+
+        if (!content.trim()) {
+            alert("Message cannot be empty");
+            return;
+        }
+
+        const chatMessage = {
+            senderGuestId: currentGuest.guestId,
+            senderName: currentGuest.displayName || "Stranger",
+            content: content,
+            messageType: "CHAT"
+        };
+
+        stompClient.publish({
+            destination: "/app/chat.send",
+            body: JSON.stringify(chatMessage)
+        });
+
+        document.getElementById("broadcastMessage").value = "";
+    }
+
+    function showBroadcastMessage(message) {
+        const container = document.getElementById("broadcastMessages");
+
+        const div = document.createElement("div");
+        div.className = "message";
+
+        div.innerText =
+            message.senderGuestId + " : " + message.content +
+            (message.timestamp ? " [" + message.timestamp + "]" : "");
+
+        container.appendChild(div);
+    }
+
+    function startChat() {
+        if (!currentGuest) {
+            alert("Create guest first");
+            return;
+        }
+
+        if (!isConnected || !stompClient || !stompClient.connected) {
+            alert("Connect WebSocket first");
+            return;
+        }
+
+        const request = {
+            guestId: currentGuest.guestId
+        };
+
+        stompClient.publish({
+            destination: "/app/chat.start",
+            body: JSON.stringify(request)
+        });
+
+        console.log("Start chat request sent:", request);
+    }
+</script>
+
+</body>
+</html>

@@ -1,93 +1,194 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Kismet WebSocket Test</title>
+    <title>Kismet Matchmaking Test Tool</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 30px; background-color: #f9f9f9; color: #333; }
+        .container { max-width: 600px; background: white; padding: 25px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+        button { padding: 10px 16px; font-weight: bold; border-radius: 4px; border: none; cursor: pointer; margin-right: 5px; }
+        .btn-connect { background-color: #28a745; color: white; }
+        .btn-disconnect { background-color: #dc3545; color: white; }
+        .btn-match { background-color: #007bff; color: white; width: 100%; padding: 12px; margin-top: 15px; font-size: 16px; }
+        button:disabled { opacity: 0.4; cursor: not-allowed; }
+        .status-panel { background: #f1f3f5; padding: 15px; border-radius: 6px; margin: 20px 0; border-left: 5px solid #6c757d; }
+        .status-panel.connected { border-left-color: #28a745; }
+        .status-panel.matched { border-left-color: #007bff; background-color: #e7f5ff; }
+        input[type="text"] { width: 100%; padding: 10px; margin-top: 5px; border: 1px solid #ced4da; border-radius: 4px; box-sizing: border-box; }
+        #logList { background: #212529; color: #f8f9fa; padding: 15px; border-radius: 6px; font-family: monospace; height: 200px; overflow-y: auto; list-style-type: none; margin: 0; }
+        #logList li { margin-bottom: 6px; border-bottom: 1px solid #343a40; padding-bottom: 4px; }
+        .timestamp { color: #ffc107; margin-right: 8px; }
+    </style>
 </head>
 <body>
-    <h2>Kismet WebSocket Test</h2>
 
-    <button onclick="connect()">Connect</button>
-    <button onclick="disconnect()">Disconnect</button>
+<div class="container">
+    <h2>Kismet Matchmaking Test Gateway (Day 4)</h2>
+    <p style="color: #666; font-size: 14px;">Validates REST API Guest registration, individual WebSocket topic registration, and match queues.</p>
+    
+    <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
 
-    <br><br>
+    <div>
+        <button id="connectBtn" class="btn-connect" onclick="connectFlow()">Connect Backend</button>
+        <button id="disconnectBtn" class="btn-disconnect" onclick="disconnectFlow()" disabled>Disconnect</button>
+    </div>
 
-    <input type="text" id="guestId" placeholder="Guest ID" value="GUEST-test123">
-    <input type="text" id="message" placeholder="Type message">
+    <div style="margin-top: 20px;">
+        <label style="font-weight: bold;">Assigned System Guest ID:</label>
+        <input type="text" id="guestIdDisplay" placeholder="Automatically fetched from API on connection..." readonly style="background-color: #e9ecef;">
+    </div>
 
-    <button onclick="sendMessage()">Send</button>
+    <button id="startChatBtn" class="btn-match" onclick="triggerMatchmaking()" disabled>Find a Stranger (Start Match)</button>
 
-    <h3>Messages:</h3>
-    <ul id="messages"></ul>
+    <div id="statusPanel" class="status-panel">
+        <div><strong>Backend Status:</strong> <span id="networkStatus">OFFLINE</span></div>
+        <div style="margin-top: 5px;"><strong>Match Status:</strong> <span id="matchStatus">IDLE</span></div>
+        <div style="margin-top: 5px;"><strong>Active Room Target:</strong> <span id="roomStatus" style="font-family: monospace; font-weight: bold;">NONE</span></div>
+    </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@stomp/stompjs@7/bundles/stomp.umd.min.js"></script>
+    <h3>Live Transaction Logs:</h3>
+    <ul id="logList">
+        <li><span class="timestamp">[System]</span>Waiting for initialization sequence...</li>
+    </ul>
+</div>
 
-    <script>
-        let stompClient = null;
+<script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@stomp/stompjs@7/bundles/stomp.umd.min.js"></script>
 
-        function connect() {
+<script>
+    let stompClient = null;
+    let personalizedSubscription = null;
+    let localGuestId = null;
+
+    // Orchestrates sequential execution: REST API validation -> WebSocket Connection -> Subscriptions
+    async function connectFlow() {
+        appendLog("Initiating Guest Registration via API standard...");
+        
+        try {
+            // STEP 1: Dynamically call the POST controller to reserve/obtain Guest token identity
+            const response = await fetch('http://localhost:8080/api/guests', { 
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+
+            if(!response.ok) throw new Error("HTTP error status code: " + response.status);
+
+            const guestData = await response.json();
+            localGuestId = guestData.guestId;
+            document.getElementById("guestIdDisplay").value = localGuestId;
+            appendLog(`Success: Active Session Token registered [${localGuestId}]`);
+
+            // STEP 2: Configure and establish persistent duplex network stream
+            appendLog("Opening active WebSocket socket layer...");
             const socket = new SockJS('http://localhost:8080/ws');
 
             stompClient = new StompJs.Client({
                 webSocketFactory: () => socket,
                 reconnectDelay: 5000,
                 onConnect: function () {
-                    console.log('Connected to Kismet WebSocket');
-
-                    stompClient.subscribe('/topic/public', function (message) {
-                        const chatMessage = JSON.parse(message.body);
-                        showMessage(chatMessage);
-                    });
+                    appendLog("WebSocket state resolved: CONNECTED");
+                    toggleControlState(true);
+                    
+                    // STEP 3: Setup internal subscriber listener addressing your specific message broker channel
+                    registerMatchBrokerChannel(localGuestId);
                 },
                 onStompError: function (frame) {
-                    console.error('Broker error: ' + frame.headers['message']);
-                    console.error('Details: ' + frame.body);
+                    appendLog("STOMP protocol exception: " + frame.headers['message']);
+                    disconnectFlow();
                 }
             });
 
             stompClient.activate();
-        }
 
-        function disconnect() {
-            if (stompClient !== null) {
-                stompClient.deactivate();
-                console.log("Disconnected");
+        } catch (error) {
+            appendLog(`Fatal Connect Failure: Check if Spring Boot Backend App is running on port 8080.`);
+            console.error(error);
+            alert("Backend application connection timeout. Ensure API context path is actively serving traffic.");
+        }
+    }
+
+    // Configures dedicated, isolated broker address for receiving point-to-point server responses
+    function registerMatchBrokerChannel(guestId) {
+        const targetingChannel = `/topic/match/${guestId}`;
+        appendLog(`Subscribing routing matrix down to channel: ${targetingChannel}`);
+
+        personalizedSubscription = stompClient.subscribe(targetingChannel, function (message) {
+            const rawPayload = JSON.parse(message.body);
+            document.getElementById("matchStatus").innerText = rawPayload.status;
+            
+            if (rawPayload.status === "WAITING") {
+                document.getElementById("statusPanel").className = "status-panel connected";
+                appendLog(`⏳ Server Response: ${rawPayload.message}`);
+            } 
+            else if (rawPayload.status === "MATCHED") {
+                document.getElementById("statusPanel").className = "status-panel matched";
+                document.getElementById("roomStatus").innerText = rawPayload.roomId;
+                appendLog(`🎉 MATCH FOUND! Assigned Room: ${rawPayload.roomId} | Paired with Stranger ID: ${rawPayload.strangerGuestId}`);
             }
-        }
-
-        function sendMessage() {
-            const guestId = document.getElementById('guestId').value;
-            const messageContent = document.getElementById('message').value;
-
-            if (!stompClient || !stompClient.connected) {
-                alert("Please connect first");
-                return;
+            else if (rawPayload.status === "FAILED") {
+                appendLog(`❌ Session rejected: ${rawPayload.message}`);
             }
+        });
+    }
 
-            const chatMessage = {
-                senderGuestId: guestId,
-                senderName: "Stranger",
-                content: messageContent,
-                messageType: "CHAT"
-            };
-
-            stompClient.publish({
-                destination: "/app/chat.send",
-                body: JSON.stringify(chatMessage)
-            });
-
-            document.getElementById('message').value = '';
+    // Signals the Matchmaking queue destination that you are explicitly looking for a matching participant
+    function triggerMatchmaking() {
+        if (!stompClient || !stompClient.connected) {
+            alert("Connection session dropped. Please reconnect.");
+            return;
         }
 
-        function showMessage(message) {
-            const messagesList = document.getElementById('messages');
-            const messageItem = document.createElement('li');
+        appendLog("Pushing match authorization request packet payload up to processing engine...");
+        
+        stompClient.publish({
+            destination: "/app/chat.start",
+            body: JSON.stringify({ guestId: localGuestId })
+        });
+    }
 
-            messageItem.textContent =
-                message.senderGuestId + " : " + message.content + " [" + message.timestamp + "]";
-
-            messagesList.appendChild(messageItem);
+    // Safely tears down active transport interfaces and resets standard application state
+    function disconnectFlow() {
+        if (personalizedSubscription) {
+            personalizedSubscription.unsubscribe();
+            personalizedSubscription = null;
         }
-    </script>
+        if (stompClient) {
+            stompClient.deactivate();
+            stompClient = null;
+        }
+        
+        toggleControlState(false);
+        appendLog("Terminated communication cleanly. Session state wiped.");
+    }
+
+    function toggleControlState(isConnected) {
+        document.getElementById("connectBtn").disabled = isConnected;
+        document.getElementById("disconnectBtn").disabled = !isConnected;
+        document.getElementById("startChatBtn").disabled = !isConnected;
+        
+        const netStatus = document.getElementById("networkStatus");
+        netStatus.innerText = isConnected ? "ONLINE (ACTIVE)" : "OFFLINE";
+        netStatus.style.color = isConnected ? "#28a745" : "#dc3545";
+
+        if (!isConnected) {
+            document.getElementById("statusPanel").className = "status-panel";
+            document.getElementById("matchStatus").innerText = "IDLE";
+            document.getElementById("roomStatus").innerText = "NONE";
+            document.getElementById("guestIdDisplay").value = "";
+            localGuestId = null;
+        } else {
+            document.getElementById("statusPanel").className = "status-panel connected";
+            document.getElementById("matchStatus").innerText = "CONNECTED (IDLE)";
+        }
+    }
+
+    function appendLog(text) {
+        const logBox = document.getElementById('logList');
+        const entry = document.createElement('li');
+        const time = new Date().toLocaleTimeString();
+        entry.innerHTML = `<span class="timestamp">[${time}]</span>${text}`;
+        logBox.appendChild(entry);
+        logBox.scrollTop = logBox.scrollHeight; // Auto scrolls text tracking to bottom
+    }
+</script>
 </body>
 </html>

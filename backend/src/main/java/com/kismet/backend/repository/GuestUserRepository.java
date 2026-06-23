@@ -12,4 +12,6 @@ public interface GuestUserRepository extends JpaRepository<GuestUser,Long> {
     Optional<GuestUser> findByGuestId(String guestId);
     List<GuestUser> findByStatus(GuestStatus status);
 
+    boolean existsByGuestId(String guestId);
+
 }

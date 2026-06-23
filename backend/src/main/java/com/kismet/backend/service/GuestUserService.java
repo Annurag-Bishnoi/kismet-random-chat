@@ -37,6 +37,8 @@ public class GuestUserService {
                 .build();
     }
 
+
+
     public GuestResponse getGuestByGuestId(String guestId) {
 
         GuestUser guestUser = guestUserRepository.findByGuestId(guestId)
@@ -48,4 +50,19 @@ public class GuestUserService {
                 .status(guestUser.getStatus())
                 .build();
     }
+
+
+
+    public void updateGuestStatus(String guestId, GuestStatus status) {
+
+        GuestUser guestUser = guestUserRepository.findByGuestId(guestId)
+                .orElseThrow(() -> new RuntimeException("Guest user not found"));
+
+        guestUser.setStatus(status);
+        guestUser.setLastSeenAt(LocalDateTime.now());
+
+        guestUserRepository.save(guestUser);
+    }
+
+
 }
