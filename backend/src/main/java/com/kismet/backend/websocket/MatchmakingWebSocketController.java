@@ -1,6 +1,7 @@
 package com.kismet.backend.websocket;
 
 import com.kismet.backend.dto.MatchRequest;
+import com.kismet.backend.dto.ChatLeaveRequest;
 import com.kismet.backend.service.MatchmakingService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.messaging.handler.annotation.MessageMapping;
@@ -15,5 +16,10 @@ public class MatchmakingWebSocketController {
     @MessageMapping("/chat.start")
     public void startChat(MatchRequest request) {
         matchmakingService.findMatch(request.getGuestId());
+    }
+
+    @MessageMapping("/chat.end")
+    public void endChat(ChatLeaveRequest request) {
+        matchmakingService.endChat(request.getGuestId(), request.getRoomId());
     }
 }

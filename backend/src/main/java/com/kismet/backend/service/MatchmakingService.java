@@ -12,11 +12,14 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Queue;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import com.kismet.backend.dto.ChatMessage;
+import com.kismet.backend.enums.MessageType;
 
 @Service
 @RequiredArgsConstructor
@@ -131,5 +134,77 @@ public class MatchmakingService {
 
     private void sendToGuest(String guestId, MatchResponse response) {
         messagingTemplate.convertAndSend("/topic/match/" + guestId, response);
+    }
+
+    public void endChat(String guestId, String roomId) {
+        if (roomId == null || roomId.isBlank()) {
+            return;
+        }
+
+        chatSessionRepository.findByRoomId(roomId).ifPresent(session -> {
+            if (session.getStatus() == ChatSessionStatus.ACTIVE) {
+                session.setStatus(ChatSessionStatus.ENDED);
+                session.setEndedAt(LocalDateTime.now());
+                session.setEndedByGuestId(guestId);
+                chatSessionRepository.save(session);
+
+                // Update users' status to ONLINE
+                guestUserService.updateGuestStatus(session.getUserOneGuestId(), GuestStatus.ONLINE);
+                guestUserService.updateGuestStatus(session.getUserTwoGuestId(), GuestStatus.ONLINE);
+
+                // Notify both users in the room that the chat has ended
+                ChatMessage leaveMessage = ChatMessage.builder()
+                        .senderGuestId(guestId)
+                        .content("Stranger has left the chat.")
+                        .messageType(MessageType.LEAVE)
+                        .timestamp(LocalDateTime.now())
+                        .roomId(roomId)
+                        .build();
+
+                messagingTemplate.convertAndSend("/topic/room/" + roomId, leaveMessage);
+            }
+        });
+    }
+
+    public void handleUserDisconnect(String guestId) {
+        if (guestId == null || guestId.isBlank()) {
+            return;
+        }
+
+        // 1. Remove from waiting queue if present
+        waitingUsers.remove(guestId);
+        waitingQueue.remove(guestId);
+
+        // 2. Find any active chat sessions for this user and end them
+        List<ChatSession> activeSessions = chatSessionRepository.findByStatus(ChatSessionStatus.ACTIVE);
+        for (ChatSession session : activeSessions) {
+            if (session.getUserOneGuestId().equals(guestId) || session.getUserTwoGuestId().equals(guestId)) {
+                session.setStatus(ChatSessionStatus.ENDED);
+                session.setEndedAt(LocalDateTime.now());
+                session.setEndedByGuestId(guestId);
+                chatSessionRepository.save(session);
+
+                String partnerGuestId = session.getUserOneGuestId().equals(guestId)
+                        ? session.getUserTwoGuestId()
+                        : session.getUserOneGuestId();
+
+                // Update partner status to ONLINE
+                guestUserService.updateGuestStatus(partnerGuestId, GuestStatus.ONLINE);
+
+                // Notify partner
+                ChatMessage leaveMessage = ChatMessage.builder()
+                        .senderGuestId(guestId)
+                        .content("Stranger has disconnected.")
+                        .messageType(MessageType.LEAVE)
+                        .timestamp(LocalDateTime.now())
+                        .roomId(session.getRoomId())
+                        .build();
+
+                messagingTemplate.convertAndSend("/topic/room/" + session.getRoomId(), leaveMessage);
+            }
+        }
+
+        // 3. Mark the user as OFFLINE in the database
+        guestUserService.updateGuestStatus(guestId, GuestStatus.OFFLINE);
     }
 }
