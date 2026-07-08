@@ -18,7 +18,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class WebSocketEventListener {
 
     private final MatchmakingService matchmakingService;
-    private final Map<String, String> sessionToGuestMap = new ConcurrentHashMap<>();
+    private final Map<String, String> sessionToEmailMap = new ConcurrentHashMap<>();
 
     @EventListener
     public void handleSessionSubscribe(SessionSubscribeEvent event) {
@@ -27,20 +27,20 @@ public class WebSocketEventListener {
         String sessionId = headers.getSessionId();
 
         if (destination != null && destination.startsWith("/topic/match/")) {
-            String guestId = destination.substring("/topic/match/".length());
-            sessionToGuestMap.put(sessionId, guestId);
-            log.info("Mapped sessionId {} to guestId {}", sessionId, guestId);
+            String email = destination.substring("/topic/match/".length());
+            sessionToEmailMap.put(sessionId, email);
+            log.info("Mapped sessionId {} to email {}", sessionId, email);
         }
     }
 
     @EventListener
     public void handleSessionDisconnect(SessionDisconnectEvent event) {
         String sessionId = event.getSessionId();
-        String guestId = sessionToGuestMap.remove(sessionId);
+        String email = sessionToEmailMap.remove(sessionId);
 
-        if (guestId != null) {
-            log.info("Guest {} disconnected", guestId);
-            matchmakingService.handleUserDisconnect(guestId);
+        if (email != null) {
+            log.info("User {} disconnected", email);
+            matchmakingService.handleUserDisconnect(email);
         }
     }
 }

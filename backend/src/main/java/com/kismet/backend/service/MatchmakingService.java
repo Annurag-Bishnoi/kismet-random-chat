@@ -1,12 +1,14 @@
 package com.kismet.backend.service;
 
 import com.kismet.backend.dto.MatchResponse;
+import com.kismet.backend.dto.ChatMessage;
 import com.kismet.backend.entity.ChatSession;
 import com.kismet.backend.enums.ChatSessionStatus;
 import com.kismet.backend.enums.GuestStatus;
 import com.kismet.backend.enums.MatchStatus;
+import com.kismet.backend.enums.MessageType;
 import com.kismet.backend.repository.ChatSessionRepository;
-import com.kismet.backend.repository.GuestUserRepository;
+import com.kismet.backend.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
@@ -18,125 +20,123 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
-import com.kismet.backend.dto.ChatMessage;
-import com.kismet.backend.enums.MessageType;
 
 @Service
 @RequiredArgsConstructor
 public class MatchmakingService {
 
-    private final GuestUserRepository guestUserRepository;
+    private final UserRepository userRepository;
     private final ChatSessionRepository chatSessionRepository;
-    private final GuestUserService guestUserService;
+    private final UserService userService;
     private final SimpMessagingTemplate messagingTemplate;
 
     private final Queue<String> waitingQueue = new ConcurrentLinkedQueue<>();
     private final Set<String> waitingUsers = ConcurrentHashMap.newKeySet();
 
-    public void findMatch(String guestId) {
+    public void findMatch(String email) {
 
-        if (guestId == null || guestId.isBlank()) {
+        if (email == null || email.isBlank()) {
             return;
         }
 
-        boolean guestExists = guestUserRepository.existsByGuestId(guestId);
+        boolean userExists = userRepository.existsByEmail(email);
 
-        if (!guestExists) {
-            sendToGuest(guestId, MatchResponse.builder()
+        if (!userExists) {
+            sendToUser(email, MatchResponse.builder()
                     .status(MatchStatus.FAILED)
-                    .message("Invalid guest user")
-                    .guestId(guestId)
+                    .message("Invalid user")
+                    .guestId(email)
                     .build());
             return;
         }
 
-        if (waitingUsers.contains(guestId)) {
-            sendToGuest(guestId, MatchResponse.builder()
+        if (waitingUsers.contains(email)) {
+            sendToUser(email, MatchResponse.builder()
                     .status(MatchStatus.WAITING)
                     .message("Already waiting for a stranger...")
-                    .guestId(guestId)
+                    .guestId(email)
                     .build());
             return;
         }
 
-        String waitingGuestId = getValidWaitingGuest(guestId);
+        String waitingEmail = getValidWaitingUser(email);
 
-        if (waitingGuestId == null) {
-            addToWaitingQueue(guestId);
+        if (waitingEmail == null) {
+            addToWaitingQueue(email);
             return;
         }
 
-        createMatch(waitingGuestId, guestId);
+        createMatch(waitingEmail, email);
     }
 
-    private String getValidWaitingGuest(String currentGuestId) {
+    private String getValidWaitingUser(String currentEmail) {
 
         while (!waitingQueue.isEmpty()) {
-            String waitingGuestId = waitingQueue.poll();
-            waitingUsers.remove(waitingGuestId);
+            String waitingEmail = waitingQueue.poll();
+            waitingUsers.remove(waitingEmail);
 
-            if (!waitingGuestId.equals(currentGuestId)
-                    && guestUserRepository.existsByGuestId(waitingGuestId)) {
-                return waitingGuestId;
+            if (!waitingEmail.equals(currentEmail)
+                    && userRepository.existsByEmail(waitingEmail)) {
+                return waitingEmail;
             }
         }
 
         return null;
     }
 
-    private void addToWaitingQueue(String guestId) {
+    private void addToWaitingQueue(String email) {
 
-        waitingQueue.offer(guestId);
-        waitingUsers.add(guestId);
+        waitingQueue.offer(email);
+        waitingUsers.add(email);
 
-        guestUserService.updateGuestStatus(guestId, GuestStatus.WAITING);
+        userService.updateUserStatus(email, GuestStatus.WAITING);
 
-        sendToGuest(guestId, MatchResponse.builder()
+        sendToUser(email, MatchResponse.builder()
                 .status(MatchStatus.WAITING)
                 .message("Waiting for a stranger...")
-                .guestId(guestId)
+                .guestId(email)
                 .build());
     }
 
-    private void createMatch(String userOneGuestId, String userTwoGuestId) {
+    private void createMatch(String userOneEmail, String userTwoEmail) {
 
         String roomId = "ROOM-" + UUID.randomUUID().toString().substring(0, 8);
 
         ChatSession chatSession = ChatSession.builder()
                 .roomId(roomId)
-                .userOneGuestId(userOneGuestId)
-                .userTwoGuestId(userTwoGuestId)
+                .userOneGuestId(userOneEmail)
+                .userTwoGuestId(userTwoEmail)
                 .status(ChatSessionStatus.ACTIVE)
                 .startedAt(LocalDateTime.now())
                 .build();
 
         chatSessionRepository.save(chatSession);
 
-        guestUserService.updateGuestStatus(userOneGuestId, GuestStatus.CHATTING);
-        guestUserService.updateGuestStatus(userTwoGuestId, GuestStatus.CHATTING);
+        userService.updateUserStatus(userOneEmail, GuestStatus.CHATTING);
+        userService.updateUserStatus(userTwoEmail, GuestStatus.CHATTING);
 
-        sendToGuest(userOneGuestId, MatchResponse.builder()
+        sendToUser(userOneEmail, MatchResponse.builder()
                 .status(MatchStatus.MATCHED)
                 .message("Stranger found")
                 .roomId(roomId)
-                .guestId(userOneGuestId)
-                .strangerGuestId(userTwoGuestId)
+                .guestId(userOneEmail)
+                .strangerGuestId(userTwoEmail)
                 .build());
 
-        sendToGuest(userTwoGuestId, MatchResponse.builder()
+        sendToUser(userTwoEmail, MatchResponse.builder()
                 .status(MatchStatus.MATCHED)
                 .message("Stranger found")
                 .roomId(roomId)
-                .guestId(userTwoGuestId)
-                .strangerGuestId(userOneGuestId)
+                .guestId(userTwoEmail)
+                .strangerGuestId(userOneEmail)
                 .build());
     }
 
-    private void sendToGuest(String guestId, MatchResponse response) {
-        messagingTemplate.convertAndSend("/topic/match/" + guestId, response);
+    private void sendToUser(String email, MatchResponse response) {
+        messagingTemplate.convertAndSend("/topic/match/" + email, response);
     }
 
-    public void endChat(String guestId, String roomId) {
+    public void endChat(String email, String roomId) {
         if (roomId == null || roomId.isBlank()) {
             return;
         }
@@ -145,16 +145,16 @@ public class MatchmakingService {
             if (session.getStatus() == ChatSessionStatus.ACTIVE) {
                 session.setStatus(ChatSessionStatus.ENDED);
                 session.setEndedAt(LocalDateTime.now());
-                session.setEndedByGuestId(guestId);
+                session.setEndedByGuestId(email);
                 chatSessionRepository.save(session);
 
                 // Update users' status to ONLINE
-                guestUserService.updateGuestStatus(session.getUserOneGuestId(), GuestStatus.ONLINE);
-                guestUserService.updateGuestStatus(session.getUserTwoGuestId(), GuestStatus.ONLINE);
+                userService.updateUserStatus(session.getUserOneGuestId(), GuestStatus.ONLINE);
+                userService.updateUserStatus(session.getUserTwoGuestId(), GuestStatus.ONLINE);
 
                 // Notify both users in the room that the chat has ended
                 ChatMessage leaveMessage = ChatMessage.builder()
-                        .senderGuestId(guestId)
+                        .senderGuestId(email)
                         .content("Stranger has left the chat.")
                         .messageType(MessageType.LEAVE)
                         .timestamp(LocalDateTime.now())
@@ -166,34 +166,34 @@ public class MatchmakingService {
         });
     }
 
-    public void handleUserDisconnect(String guestId) {
-        if (guestId == null || guestId.isBlank()) {
+    public void handleUserDisconnect(String email) {
+        if (email == null || email.isBlank()) {
             return;
         }
 
         // 1. Remove from waiting queue if present
-        waitingUsers.remove(guestId);
-        waitingQueue.remove(guestId);
+        waitingUsers.remove(email);
+        waitingQueue.remove(email);
 
         // 2. Find any active chat sessions for this user and end them
         List<ChatSession> activeSessions = chatSessionRepository.findByStatus(ChatSessionStatus.ACTIVE);
         for (ChatSession session : activeSessions) {
-            if (session.getUserOneGuestId().equals(guestId) || session.getUserTwoGuestId().equals(guestId)) {
+            if (session.getUserOneGuestId().equals(email) || session.getUserTwoGuestId().equals(email)) {
                 session.setStatus(ChatSessionStatus.ENDED);
                 session.setEndedAt(LocalDateTime.now());
-                session.setEndedByGuestId(guestId);
+                session.setEndedByGuestId(email);
                 chatSessionRepository.save(session);
 
-                String partnerGuestId = session.getUserOneGuestId().equals(guestId)
+                String partnerEmail = session.getUserOneGuestId().equals(email)
                         ? session.getUserTwoGuestId()
                         : session.getUserOneGuestId();
 
                 // Update partner status to ONLINE
-                guestUserService.updateGuestStatus(partnerGuestId, GuestStatus.ONLINE);
+                userService.updateUserStatus(partnerEmail, GuestStatus.ONLINE);
 
                 // Notify partner
                 ChatMessage leaveMessage = ChatMessage.builder()
-                        .senderGuestId(guestId)
+                        .senderGuestId(email)
                         .content("Stranger has disconnected.")
                         .messageType(MessageType.LEAVE)
                         .timestamp(LocalDateTime.now())
@@ -205,6 +205,6 @@ public class MatchmakingService {
         }
 
         // 3. Mark the user as OFFLINE in the database
-        guestUserService.updateGuestStatus(guestId, GuestStatus.OFFLINE);
+        userService.updateUserStatus(email, GuestStatus.OFFLINE);
     }
 }

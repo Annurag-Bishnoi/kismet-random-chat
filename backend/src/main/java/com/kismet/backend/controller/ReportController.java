@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.CrossOrigin;
+import java.security.Principal;
 
 @RestController
 @CrossOrigin
@@ -20,8 +21,11 @@ public class ReportController {
     }
 
     @PostMapping
-    public String createReport(@Valid @RequestBody ReportRequest request) {
+    public String createReport(Principal principal, @Valid @RequestBody ReportRequest request) {
+        if (principal == null) {
+            throw new RuntimeException("Unauthorized");
+        }
+        request.setReporterGuestId(principal.getName());
         return reportService.createReport(request);
     }
-
 }

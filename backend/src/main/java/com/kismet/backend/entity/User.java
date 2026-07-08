@@ -1,26 +1,26 @@
 package com.kismet.backend.entity;
 
-import com.fasterxml.jackson.annotation.JsonTypeId;
 import com.kismet.backend.enums.GuestStatus;
 import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.LocalDateTime;
+
 @Entity
-@Table(name="guest_users")
+@Table(name="users")
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class GuestUser {
+public class User {
 
     @Id
     @GeneratedValue(strategy= GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false,unique = true)
-    private String guestId;
+    @Column(nullable = false, unique = true)
+    private String email;
 
     @Column(nullable = false)
     private String displayName;
